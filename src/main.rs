@@ -1,12 +1,14 @@
-// Modify this constants.
-const DIR: &str = "spaceships/p4/h0v1";
+/// Search results will be saved in this directory.
+const DIR: &str = "b3s23/p4/h0v1";
 const MAX_WIDTH: isize = 1024;
 const PERIOD: isize = 4;
+const RULE: &str = "B3/S23";
 const SYMMETRY: Symmetry = Symmetry::C1;
 const TRANSLATION: (isize, isize) = (0, 1);
+/// The world is printed every `VIEW_FREQ` steps.
 const VIEW_FREQ: u64 = 1 << 22;
 
-use ansi_term::Color::{self, Green, White, Yellow};
+use ansi_term::{Color, Style};
 use itertools::Itertools;
 use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
 use std::{
@@ -32,11 +34,13 @@ impl SSS {
         period: isize,
         translation: (isize, isize),
         symmetry: Symmetry,
+        rule: &str,
     ) -> Result<Self, String> {
         let cell_count = 0;
         let config = Config::new(max_width, 1, period)
             .set_translate(translation.0, translation.1)
             .set_symmetry(symmetry)
+            .set_rule_string(String::from(rule))
             .set_new_state(NewState::Choose(State::Dead))
             .set_non_empty_front(true)
             .set_reduce_max(true);
@@ -52,7 +56,7 @@ impl SSS {
         })
     }
 
-    fn display(&self, term_width: usize, color: Color) {
+    fn display(&self, term_width: usize, style: Style) {
         let info = format!(
             "{:=<1$}",
             format!(
@@ -64,14 +68,14 @@ impl SSS {
             ),
             term_width - 1
         );
-        println!("{}", Yellow.paint(info));
+        println!("{}", Color::Yellow.paint(info));
         let display = self
             .world
             .display_gen(self.gen)
             .lines()
             .map(|l| &l[0..term_width - 1])
             .join("\n");
-        println!("{}", color.paint(display));
+        println!("{}", style.paint(display));
     }
 
     fn write_pat<P: AsRef<Path>>(&self, dir: &P) -> Result<(), Error> {
@@ -94,16 +98,26 @@ impl SSS {
             width, height, self.config.rule_string
         )?;
         let (mut char, mut n) = (None, 0);
+        let mut line = String::new();
         for c in lines.join("\n").trim_end().chars() {
             if char == Some(c) {
                 n += 1;
             } else if n > 0 && char.is_some() {
-                write!(file, "{}", n)?;
+                let mut tally = String::new();
+                if n > 1 {
+                    tally = format!("{}", n);
+                }
                 match char {
-                    Some('.') => write!(file, "b")?,
-                    Some('O') => write!(file, "o")?,
-                    Some('\n') => write!(file, "$")?,
+                    Some('.') => tally.push('b'),
+                    Some('O') => tally.push('o'),
+                    Some('\n') => tally.push('$'),
                     _ => unreachable!(),
+                }
+                if line.len() + tally.len() <= 70 {
+                    line += &tally;
+                } else {
+                    writeln!(file, "{}", line)?;
+                    line = tally;
                 }
                 char = Some(c);
                 n = 1;
@@ -112,14 +126,26 @@ impl SSS {
                 n = 1;
             }
         }
-        if n > 0 && char.is_some() {
-            write!(file, "{}", n)?;
-            match char {
-                Some('.') => write!(file, "b")?,
-                Some('O') => write!(file, "o")?,
-                Some('\n') => write!(file, "$")?,
-                _ => unreachable!(),
-            }
+        let mut tally = String::new();
+        if n > 1 {
+            tally = format!("{}", n);
+        }
+        match char {
+            Some('.') => tally.push('b'),
+            Some('O') => tally.push('o'),
+            Some('\n') => tally.push('$'),
+            _ => unreachable!(),
+        }
+        if line.len() + tally.len() <= 70 {
+            line += &tally;
+        } else {
+            writeln!(file, "{}", line)?;
+            line = tally;
+        }
+        if line.len() < 70 {
+            write!(file, "{}", line)?;
+        } else {
+            writeln!(file, "{}", line)?;
         }
         writeln!(file, "!")
     }
@@ -135,7 +161,7 @@ impl SSS {
                         .unwrap();
                     self.gen = min_gen;
                     self.cell_count = min_cell_count;
-                    self.display(term_width, White);
+                    self.display(term_width, Style::default());
                     self.write_pat(dir).map_err(|e| e.to_string())?;
                     self.config.max_cell_count = Some(self.cell_count - 1);
                     self.gen = 0;
@@ -146,7 +172,7 @@ impl SSS {
                     self.gen = 0;
                 }
                 Status::Searching => {
-                    self.display(term_width, Green);
+                    self.display(term_width, Color::Green.normal());
                     self.gen = (self.gen + 1) % PERIOD;
                 }
                 Status::Paused => unreachable!(),
@@ -157,6 +183,6 @@ impl SSS {
 
 fn main() -> Result<(), String> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
-    let mut sss = SSS::new(MAX_WIDTH, PERIOD, TRANSLATION, SYMMETRY)?;
+    let mut sss = SSS::new(MAX_WIDTH, PERIOD, TRANSLATION, SYMMETRY, RULE)?;
     sss.search(term_width, &DIR)
 }

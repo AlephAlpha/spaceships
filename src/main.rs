@@ -1,7 +1,7 @@
 /// Search results will be saved in this directory.
-const DIR: &str = "b3s23/p4/h0v1";
+const DIR: &str = "b3s23/p5/h0v1";
 const MAX_WIDTH: isize = 1024;
-const PERIOD: isize = 4;
+const PERIOD: isize = 5;
 const RULE: &str = "B3/S23";
 const SYMMETRY: Symmetry = Symmetry::C1;
 const TRANSLATION: (isize, isize) = (0, 1);

@@ -1,13 +1,14 @@
 // Modify this constants.
-const DIR: &str = "spaceships/p3/h0v1";
+const DIR: &str = "spaceships/p4/h0v1";
 const MAX_WIDTH: isize = 1024;
-const PERIOD: isize = 3;
+const PERIOD: isize = 4;
+const SYMMETRY: Symmetry = Symmetry::C1;
 const TRANSLATION: (isize, isize) = (0, 1);
 const VIEW_FREQ: u64 = 1 << 22;
 
 use ansi_term::Color::{self, Green, White, Yellow};
 use itertools::Itertools;
-use rlifesrc_lib::{Config, NewState, Search, State, Status};
+use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
 use std::{
     fs::{create_dir_all, OpenOptions},
     io::{Error, Write},
@@ -26,10 +27,16 @@ struct SSS {
 }
 
 impl SSS {
-    fn new(max_width: isize, period: isize, translation: (isize, isize)) -> Result<Self, String> {
+    fn new(
+        max_width: isize,
+        period: isize,
+        translation: (isize, isize),
+        symmetry: Symmetry,
+    ) -> Result<Self, String> {
         let cell_count = 0;
         let config = Config::new(max_width, 1, period)
             .set_translate(translation.0, translation.1)
+            .set_symmetry(symmetry)
             .set_new_state(NewState::Choose(State::Dead))
             .set_non_empty_front(true)
             .set_reduce_max(true);
@@ -60,7 +67,7 @@ impl SSS {
         println!("{}", Yellow.paint(info));
         let display = self
             .world
-            .display_gen(0)
+            .display_gen(self.gen)
             .lines()
             .map(|l| &l[0..term_width - 1])
             .join("\n");
@@ -77,8 +84,8 @@ impl SSS {
             .append(true)
             .create(true)
             .open(filename)?;
-        let display = self.world.display_gen(self.gen);
-        let mut lines = display.lines().map(|l| l.trim_end_matches('.'));
+        let pat = self.world.display_gen(self.gen);
+        let mut lines = pat.lines().map(|l| l.trim_end_matches('.'));
         let width = lines.clone().map(|l| l.len()).max().unwrap_or(0);
         let height = lines.clone().count();
         writeln!(
@@ -114,13 +121,12 @@ impl SSS {
                 _ => unreachable!(),
             }
         }
-        write!(file, "!")
+        writeln!(file, "!")
     }
 
     fn search<P: AsRef<Path>>(&mut self, term_width: usize, dir: &P) -> Result<(), String> {
         loop {
             let status = self.world.search(Some(VIEW_FREQ));
-            self.gen = (self.gen + 1) % PERIOD;
             match status {
                 Status::Found => {
                     let (min_gen, min_cell_count) = (0..PERIOD)
@@ -132,13 +138,17 @@ impl SSS {
                     self.display(term_width, White);
                     self.write_pat(dir).map_err(|e| e.to_string())?;
                     self.config.max_cell_count = Some(self.cell_count - 1);
+                    self.gen = 0;
                 }
                 Status::None => {
                     self.config.height += 1;
                     self.world = self.config.set_world()?;
                     self.gen = 0;
                 }
-                Status::Searching => self.display(term_width, Green),
+                Status::Searching => {
+                    self.display(term_width, Green);
+                    self.gen = (self.gen + 1) % PERIOD;
+                }
                 Status::Paused => unreachable!(),
             }
         }
@@ -147,6 +157,6 @@ impl SSS {
 
 fn main() -> Result<(), String> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
-    let mut sss = SSS::new(MAX_WIDTH, PERIOD, TRANSLATION)?;
+    let mut sss = SSS::new(MAX_WIDTH, PERIOD, TRANSLATION, SYMMETRY)?;
     sss.search(term_width, &DIR)
 }

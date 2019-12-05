@@ -1,10 +1,3 @@
-/// Search results will be saved in this directory.
-const DIR: &str = "b3s23/p5/h0v1";
-const MAX_WIDTH: isize = 1024;
-const PERIOD: isize = 5;
-const RULE: &str = "B3/S23";
-const SYMMETRY: Symmetry = Symmetry::C1;
-const TRANSLATION: (isize, isize) = (0, 1);
 /// The world is printed every `VIEW_FREQ` steps.
 const VIEW_FREQ: u64 = 1 << 22;
 
@@ -12,45 +5,63 @@ use ansi_term::{Color, Style};
 use itertools::Itertools;
 use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{create_dir_all, File},
     io::{Error, Write},
     path::Path,
 };
 use stopwatch::Stopwatch;
+use structopt::StructOpt;
 use term_size::dimensions;
+
+#[derive(Clone, Debug, StructOpt)]
+#[structopt(name = "basic")]
+struct Opt {
+    /// Search results will be saved in this directory.
+    #[structopt(short, long)]
+    dir: String,
+    #[structopt(short, long, default_value = "1024")]
+    max_width: isize,
+    #[structopt(short, long)]
+    period: isize,
+    #[structopt(short, long, default_value = "0")]
+    dx: isize,
+    #[structopt(short, long, default_value = "42")]
+    dy: isize,
+    #[structopt(short, long, default_value = "C1")]
+    symmetry: Symmetry,
+    #[structopt(short, long, default_value = "B3/S23")]
+    rule: String,
+}
 
 /// Spaceship Search
 struct SSS {
     cell_count: usize,
     config: Config,
     gen: isize,
+    period: isize,
     world: Box<dyn Search>,
     stopwatch: Stopwatch,
 }
 
 impl SSS {
-    fn new(
-        max_width: isize,
-        period: isize,
-        translation: (isize, isize),
-        symmetry: Symmetry,
-        rule: &str,
-    ) -> Result<Self, String> {
+    fn new(opt: Opt) -> Result<Self, String> {
         let cell_count = 0;
-        let config = Config::new(max_width, 1, period)
-            .set_translate(translation.0, translation.1)
-            .set_symmetry(symmetry)
-            .set_rule_string(String::from(rule))
+        let config = Config::new(opt.max_width, 1, opt.period)
+            .set_translate(opt.dx, opt.dy)
+            .set_symmetry(opt.symmetry)
+            .set_rule_string(opt.rule)
             .set_new_state(NewState::Choose(State::Dead))
             .set_non_empty_front(true)
             .set_reduce_max(true);
         let gen = 0;
+        let period = opt.period;
         let world = config.set_world()?;
         let stopwatch = Stopwatch::start_new();
         Ok(SSS {
             cell_count,
             config,
             gen,
+            period,
             world,
             stopwatch,
         })
@@ -84,10 +95,7 @@ impl SSS {
             "{}P{}H{}V{}.rle",
             self.cell_count, self.config.period, self.config.dx, self.config.dy
         ));
-        let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(filename)?;
+        let mut file = File::create(filename)?;
         let pat = self.world.display_gen(self.gen);
         let mut lines = pat.lines().map(|l| l.trim_end_matches('.'));
         let width = lines.clone().map(|l| l.len()).max().unwrap_or(0);
@@ -103,10 +111,11 @@ impl SSS {
             if char == Some(c) {
                 n += 1;
             } else if n > 0 && char.is_some() {
-                let mut tally = String::new();
-                if n > 1 {
-                    tally = format!("{}", n);
-                }
+                let mut tally = if n > 1 {
+                    format!("{}", n)
+                } else {
+                    String::new()
+                };
                 match char {
                     Some('.') => tally.push('b'),
                     Some('O') => tally.push('o'),
@@ -126,10 +135,11 @@ impl SSS {
                 n = 1;
             }
         }
-        let mut tally = String::new();
-        if n > 1 {
-            tally = format!("{}", n);
-        }
+        let mut tally = if n > 1 {
+            format!("{}", n)
+        } else {
+            String::new()
+        };
         match char {
             Some('.') => tally.push('b'),
             Some('O') => tally.push('o'),
@@ -155,7 +165,7 @@ impl SSS {
             let status = self.world.search(Some(VIEW_FREQ));
             match status {
                 Status::Found => {
-                    let (min_gen, min_cell_count) = (0..PERIOD)
+                    let (min_gen, min_cell_count) = (0..self.period)
                         .map(|t| (t, self.world.cell_count(t)))
                         .min_by_key(|p| p.1)
                         .unwrap();
@@ -173,7 +183,7 @@ impl SSS {
                 }
                 Status::Searching => {
                     self.display(term_width, Color::Green.normal());
-                    self.gen = (self.gen + 1) % PERIOD;
+                    self.gen = (self.gen + 1) % self.period;
                 }
                 Status::Paused => unreachable!(),
             }
@@ -183,6 +193,8 @@ impl SSS {
 
 fn main() -> Result<(), String> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
-    let mut sss = SSS::new(MAX_WIDTH, PERIOD, TRANSLATION, SYMMETRY, RULE)?;
-    sss.search(term_width, &DIR)
+    let opt = Opt::from_args();
+    let dir = opt.dir.clone();
+    let mut sss = SSS::new(opt)?;
+    sss.search(term_width, &dir)
 }

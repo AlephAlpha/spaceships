@@ -21,19 +21,19 @@ struct Opt {
     dir: String,
     #[structopt(short, long)]
     period: isize,
-    #[structopt(short, long, default_value = "0")]
+    #[structopt(short = "x", long, default_value = "0")]
     dx: isize,
-    #[structopt(short, long, default_value = "42")]
+    #[structopt(short = "y", long, default_value = "42")]
     dy: isize,
     #[structopt(short, long, default_value = "C1")]
     symmetry: Symmetry,
     #[structopt(short, long, default_value = "B3/S23")]
     rule: String,
-    #[structopt(short, long, default_value = "1024")]
+    #[structopt(short = "w", long, default_value = "1024")]
     max_width: isize,
-    #[structopt(short, long, default_value = "0")]
+    #[structopt(short = "c", long, default_value = "0")]
     init_cell_count: usize,
-    #[structopt(short, long, default_value = "1")]
+    #[structopt(short = "h", long, default_value = "1")]
     init_height: isize,
 }
 

@@ -19,8 +19,6 @@ struct Opt {
     /// Search results will be saved in this directory.
     #[structopt(short, long)]
     dir: String,
-    #[structopt(short, long, default_value = "1024")]
-    max_width: isize,
     #[structopt(short, long)]
     period: isize,
     #[structopt(short, long, default_value = "0")]
@@ -31,6 +29,12 @@ struct Opt {
     symmetry: Symmetry,
     #[structopt(short, long, default_value = "B3/S23")]
     rule: String,
+    #[structopt(short, long, default_value = "1024")]
+    max_width: isize,
+    #[structopt(short, long, default_value = "0")]
+    init_cell_count: usize,
+    #[structopt(short, long, default_value = "1")]
+    init_height: isize,
 }
 
 /// Spaceship Search
@@ -45,13 +49,18 @@ struct SSS {
 
 impl SSS {
     fn new(opt: Opt) -> Result<Self, String> {
-        let cell_count = 0;
-        let config = Config::new(opt.max_width, 1, opt.period)
+        let cell_count = opt.init_cell_count;
+        let config = Config::new(opt.max_width, opt.init_height, opt.period)
             .set_translate(opt.dx, opt.dy)
             .set_symmetry(opt.symmetry)
             .set_rule_string(opt.rule)
             .set_new_state(NewState::Choose(State::Dead))
             .set_non_empty_front(true)
+            .set_max_cell_count(if cell_count > 0 {
+                Some(cell_count - 1)
+            } else {
+                None
+            })
             .set_reduce_max(true);
         let gen = 0;
         let period = opt.period;

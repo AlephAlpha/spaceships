@@ -1,40 +1,100 @@
-/// The world is printed every `VIEW_FREQ` steps.
-const VIEW_FREQ: u64 = 1 << 22;
-
 use ansi_term::{Color, Style};
 use itertools::Itertools;
 use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
 use std::{
     fs::{create_dir_all, File},
     io::{Error, Write},
-    path::Path,
+    path::PathBuf,
 };
 use stopwatch::Stopwatch;
 use structopt::StructOpt;
 use term_size::dimensions;
 
 #[derive(Clone, Debug, StructOpt)]
-#[structopt(name = "basic")]
+#[structopt(
+    no_version,
+    author = "AlephAlpha",
+    about = "Search for spaceships in Conway's Game of Life using the rlifesrc lib.\n\
+             \n\
+             It starts from a given minimum height, and an optional upper bound of \
+             the cell count.\n\
+             \n\
+             When a new result is found, it will reduce the upper bound to the cell \
+             count of this result minus 1 (even if there is no initial upper bound).\n\
+             \n\
+             When no more result can be found, it will increase the height by 1 and \
+             continue the search.\n\
+             \n\
+             Spaceships with period `p`, speed `(x,y)c/p`, and `n` cells are saved \
+             in the file `{n}P{p}H{x}V{y}.rle`.\n\
+             \n\
+             Press `Ctrl-C` to abort."
+)]
 struct Opt {
-    /// Search results will be saved in this directory.
+    /// Search results are saved here.
     #[structopt(short, long)]
-    dir: String,
+    dir: PathBuf,
+    /// Period.
     #[structopt(short, long)]
     period: isize,
-    #[structopt(short = "x", long, default_value = "0")]
+    /// Horizontal translation.
+    #[structopt(short = "x", long)]
     dx: isize,
-    #[structopt(short = "y", long, default_value = "42")]
+    /// Vertical translation.
+    #[structopt(short = "y", long)]
     dy: isize,
+    /// Symmetry.
     #[structopt(short, long, default_value = "C1")]
     symmetry: Symmetry,
+    /// Rule string.
     #[structopt(short, long, default_value = "B3/S23")]
     rule: String,
+    /// Maximum width.
     #[structopt(short = "w", long, default_value = "1024")]
     max_width: isize,
+    /// Initial upper bound of the cell count.
+    ///
+    /// It will automatically decrease when a new result is found.
     #[structopt(short = "c", long, default_value = "0")]
     init_cell_count: usize,
+    /// Initial height.
+    ///
+    /// It will automatically increase when no more result can be found.
     #[structopt(short = "h", long, default_value = "1")]
     init_height: isize,
+    /// Print the search process every this number of steps.
+    #[structopt(short = "f", long, default_value = "5_000_000")]
+    view_freq: u64,
+}
+
+impl Opt {
+    fn sss(&self) -> Result<SSS, String> {
+        let cell_count = self.init_cell_count;
+        let config = Config::new(self.max_width, self.init_height, self.period)
+            .set_translate(self.dx, self.dy)
+            .set_symmetry(self.symmetry)
+            .set_rule_string(self.rule.clone())
+            .set_new_state(NewState::Choose(State::Dead))
+            .set_non_empty_front(true)
+            .set_max_cell_count(if cell_count > 0 {
+                Some(cell_count - 1)
+            } else {
+                None
+            })
+            .set_reduce_max(true);
+        let gen = 0;
+        let period = self.period;
+        let world = config.set_world()?;
+        let stopwatch = Stopwatch::start_new();
+        Ok(SSS {
+            cell_count,
+            config,
+            gen,
+            period,
+            world,
+            stopwatch,
+        })
+    }
 }
 
 /// Spaceship Search
@@ -48,34 +108,6 @@ struct SSS {
 }
 
 impl SSS {
-    fn new(opt: Opt) -> Result<Self, String> {
-        let cell_count = opt.init_cell_count;
-        let config = Config::new(opt.max_width, opt.init_height, opt.period)
-            .set_translate(opt.dx, opt.dy)
-            .set_symmetry(opt.symmetry)
-            .set_rule_string(opt.rule)
-            .set_new_state(NewState::Choose(State::Dead))
-            .set_non_empty_front(true)
-            .set_max_cell_count(if cell_count > 0 {
-                Some(cell_count - 1)
-            } else {
-                None
-            })
-            .set_reduce_max(true);
-        let gen = 0;
-        let period = opt.period;
-        let world = config.set_world()?;
-        let stopwatch = Stopwatch::start_new();
-        Ok(SSS {
-            cell_count,
-            config,
-            gen,
-            period,
-            world,
-            stopwatch,
-        })
-    }
-
     fn display(&self, term_width: usize, style: Style) {
         let info = format!(
             "{:=<1$}",
@@ -98,9 +130,9 @@ impl SSS {
         println!("{}", style.paint(display));
     }
 
-    fn write_pat<P: AsRef<Path>>(&self, dir: &P) -> Result<(), Error> {
+    fn write_pat(&self, dir: &PathBuf) -> Result<(), Error> {
         create_dir_all(dir)?;
-        let filename = dir.as_ref().join(&format!(
+        let filename = dir.join(&format!(
             "{}P{}H{}V{}.rle",
             self.cell_count, self.config.period, self.config.dx, self.config.dy
         ));
@@ -169,9 +201,9 @@ impl SSS {
         writeln!(file, "!")
     }
 
-    fn search<P: AsRef<Path>>(&mut self, term_width: usize, dir: &P) -> Result<(), String> {
+    fn search(&mut self, term_width: usize, dir: &PathBuf, view_freq: u64) -> Result<(), String> {
         loop {
-            let status = self.world.search(Some(VIEW_FREQ));
+            let status = self.world.search(Some(view_freq));
             match status {
                 Status::Found => {
                     let (min_gen, min_cell_count) = (0..self.period)
@@ -203,7 +235,6 @@ impl SSS {
 fn main() -> Result<(), String> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
     let opt = Opt::from_args();
-    let dir = opt.dir.clone();
-    let mut sss = SSS::new(opt)?;
-    sss.search(term_width, &dir)
+    let mut sss = opt.sss()?;
+    sss.search(term_width, &opt.dir, opt.view_freq)
 }

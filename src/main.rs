@@ -62,8 +62,8 @@ struct Opt {
     /// It will automatically increase when no more result can be found.
     #[structopt(short = "h", long, default_value = "1")]
     init_height: isize,
-    /// Print the search process every this number of steps.
-    #[structopt(short = "f", long, default_value = "5_000_000")]
+    /// Print the world every this number of steps.
+    #[structopt(short = "f", long, default_value = "5000000")]
     view_freq: u64,
 }
 

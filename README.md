@@ -62,5 +62,5 @@ OPTIONS:
             Symmetry. [default: C1]
 
     -f, --view-freq <view-freq>
-            Print the search process every this number of steps. [default: 5_000_000]
+            Print the world every this number of steps. [default: 5000000]
 ```

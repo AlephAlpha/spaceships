@@ -1,11 +1,11 @@
 use ansi_term::{Color, Style};
 use itertools::Itertools;
 use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
-use serde_json::to_vec;
+use serde_json::{from_str, to_vec};
 use std::{
     error::Error,
     fs::{create_dir_all, File},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 use stopwatch::Stopwatch;
@@ -91,14 +91,11 @@ impl Opt {
             })
             .set_reduce_max(true);
         let gen = 0;
-        let period = self.period;
         let world = config.world()?;
         let stopwatch = Stopwatch::start_new();
         Ok(SSS {
             cell_count,
-            config,
             gen,
-            period,
             world,
             stopwatch,
         })
@@ -108,21 +105,34 @@ impl Opt {
 /// Spaceship Search
 struct SSS {
     cell_count: usize,
-    config: Config,
     gen: isize,
-    period: isize,
     world: Box<dyn Search>,
     stopwatch: Stopwatch,
 }
 
 impl SSS {
+    fn from_save<P: AsRef<Path>>(save: P) -> Result<Self, Box<dyn Error>> {
+        let mut buffer = String::new();
+        File::open(&save)?.read_to_string(&mut buffer)?;
+        let world = from_str::<rlifesrc_lib::WorldSer>(&buffer)?.world()?;
+        let cell_count = world.cell_count();
+        let gen = 0;
+        let stopwatch = Stopwatch::start_new();
+        Ok(SSS {
+            cell_count,
+            gen,
+            world,
+            stopwatch,
+        })
+    }
+
     fn display(&self, term_width: usize, style: Style) {
         let info = format!(
             "{:=<1$}",
             format!(
                 "=GEN:{}==HEIGHT:{}==CELLS:{}==TIME:{:.2?}",
                 self.gen,
-                self.config.height,
+                self.world.config().height,
                 self.cell_count,
                 self.stopwatch.elapsed()
             ),
@@ -141,7 +151,10 @@ impl SSS {
     fn write_pat<P: AsRef<Path>>(&self, dir: P) -> Result<(), Box<dyn Error>> {
         let filename = dir.as_ref().join(&format!(
             "{}P{}H{}V{}.rle",
-            self.cell_count, self.config.period, self.config.dx, self.config.dy
+            self.cell_count,
+            self.world.config().period,
+            self.world.config().dx,
+            self.world.config().dy
         ));
         let mut file = File::create(filename)?;
         let pat = self.world.display_gen(self.gen);
@@ -151,7 +164,9 @@ impl SSS {
         writeln!(
             file,
             "x = {}, y = {}, rule = {}",
-            width, height, self.config.rule_string
+            width,
+            height,
+            self.world.config().rule_string
         )?;
         let (mut char, mut n) = (None, 0);
         let mut line = String::new();
@@ -229,7 +244,7 @@ impl SSS {
                 let status = self.world.search(Some(view_freq));
                 match status {
                     Status::Found => {
-                        let (min_gen, min_cell_count) = (0..self.period)
+                        let (min_gen, min_cell_count) = (0..self.world.config().period)
                             .map(|t| (t, self.world.cell_count_gen(t)))
                             .min_by_key(|p| p.1)
                             .unwrap();
@@ -237,17 +252,18 @@ impl SSS {
                         self.cell_count = min_cell_count;
                         self.display(term_width, Style::default());
                         self.write_pat(&dir).map_err(|e| e.to_string())?;
-                        self.config.max_cell_count = Some(self.cell_count - 1);
+                        self.world.config().max_cell_count = Some(self.cell_count - 1);
                         self.gen = 0;
                     }
                     Status::None => {
-                        self.config.height += 1;
-                        self.world = self.config.world()?;
+                        let mut config = self.world.config().clone();
+                        config.height += 1;
+                        self.world = config.world()?;
                         self.gen = 0;
                     }
                     Status::Searching => {
                         self.display(term_width, Color::Green.normal());
-                        self.gen = (self.gen + 1) % self.period;
+                        self.gen = (self.gen + 1) % self.world.config().period;
                     }
                     Status::Paused => unreachable!(),
                 }
@@ -260,10 +276,10 @@ impl SSS {
 fn main() -> Result<(), Box<dyn Error>> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
     let opt = Opt::from_args();
-    let mut sss = opt.sss()?;
     create_dir_all(&opt.dir)?;
     let save_dir = opt.save_dir.as_ref().unwrap_or(&opt.dir);
     create_dir_all(&save_dir)?;
     let save = save_dir.join(&"save.json");
+    let mut sss = SSS::from_save(&save).or_else(|_| opt.sss())?;
     sss.search(term_width, &opt.dir, &save, opt.view_freq, opt.save_freq)
 }

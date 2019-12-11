@@ -1,10 +1,12 @@
 use ansi_term::{Color, Style};
 use itertools::Itertools;
 use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry};
+use serde_json::to_vec;
 use std::{
+    error::Error,
     fs::{create_dir_all, File},
-    io::{Error, Write},
-    path::PathBuf,
+    io::Write,
+    path::{Path, PathBuf},
 };
 use stopwatch::Stopwatch;
 use structopt::StructOpt;
@@ -65,10 +67,16 @@ struct Opt {
     /// Print the world every this number of steps.
     #[structopt(short = "f", long, default_value = "5000000")]
     view_freq: u64,
+    /// Save the temporary search status every this number of views.
+    #[structopt(long, default_value = "100")]
+    save_freq: u64,
+    /// Temporary search status are saved here.
+    #[structopt(long)]
+    save_dir: Option<PathBuf>,
 }
 
 impl Opt {
-    fn sss(&self) -> Result<SSS, String> {
+    fn sss(&self) -> Result<SSS, Box<dyn Error>> {
         let cell_count = self.init_cell_count;
         let config = Config::new(self.max_width, self.init_height, self.period)
             .set_translate(self.dx, self.dy)
@@ -84,7 +92,7 @@ impl Opt {
             .set_reduce_max(true);
         let gen = 0;
         let period = self.period;
-        let world = config.set_world()?;
+        let world = config.world()?;
         let stopwatch = Stopwatch::start_new();
         Ok(SSS {
             cell_count,
@@ -130,9 +138,8 @@ impl SSS {
         println!("{}", style.paint(display));
     }
 
-    fn write_pat(&self, dir: &PathBuf) -> Result<(), Error> {
-        create_dir_all(dir)?;
-        let filename = dir.join(&format!(
+    fn write_pat<P: AsRef<Path>>(&self, dir: P) -> Result<(), Box<dyn Error>> {
+        let filename = dir.as_ref().join(&format!(
             "{}P{}H{}V{}.rle",
             self.cell_count, self.config.period, self.config.dx, self.config.dy
         ));
@@ -198,43 +205,65 @@ impl SSS {
         } else {
             writeln!(file, "{}", line)?;
         }
-        writeln!(file, "!")
+        writeln!(file, "!")?;
+        Ok(())
     }
 
-    fn search(&mut self, term_width: usize, dir: &PathBuf, view_freq: u64) -> Result<(), String> {
+    fn write_save<P: AsRef<Path>>(&self, save: P) -> Result<(), Box<dyn Error>> {
+        let mut file = File::create(save)?;
+        let json = to_vec(&self.world.ser())?;
+        file.write(&json)?;
+        Ok(())
+    }
+
+    fn search<P: AsRef<Path>, Q: AsRef<Path>>(
+        &mut self,
+        term_width: usize,
+        dir: P,
+        save: Q,
+        view_freq: u64,
+        save_freq: u64,
+    ) -> Result<(), Box<dyn Error>> {
         loop {
-            let status = self.world.search(Some(view_freq));
-            match status {
-                Status::Found => {
-                    let (min_gen, min_cell_count) = (0..self.period)
-                        .map(|t| (t, self.world.cell_count(t)))
-                        .min_by_key(|p| p.1)
-                        .unwrap();
-                    self.gen = min_gen;
-                    self.cell_count = min_cell_count;
-                    self.display(term_width, Style::default());
-                    self.write_pat(dir).map_err(|e| e.to_string())?;
-                    self.config.max_cell_count = Some(self.cell_count - 1);
-                    self.gen = 0;
+            for _ in 0..save_freq {
+                let status = self.world.search(Some(view_freq));
+                match status {
+                    Status::Found => {
+                        let (min_gen, min_cell_count) = (0..self.period)
+                            .map(|t| (t, self.world.cell_count_gen(t)))
+                            .min_by_key(|p| p.1)
+                            .unwrap();
+                        self.gen = min_gen;
+                        self.cell_count = min_cell_count;
+                        self.display(term_width, Style::default());
+                        self.write_pat(&dir).map_err(|e| e.to_string())?;
+                        self.config.max_cell_count = Some(self.cell_count - 1);
+                        self.gen = 0;
+                    }
+                    Status::None => {
+                        self.config.height += 1;
+                        self.world = self.config.world()?;
+                        self.gen = 0;
+                    }
+                    Status::Searching => {
+                        self.display(term_width, Color::Green.normal());
+                        self.gen = (self.gen + 1) % self.period;
+                    }
+                    Status::Paused => unreachable!(),
                 }
-                Status::None => {
-                    self.config.height += 1;
-                    self.world = self.config.set_world()?;
-                    self.gen = 0;
-                }
-                Status::Searching => {
-                    self.display(term_width, Color::Green.normal());
-                    self.gen = (self.gen + 1) % self.period;
-                }
-                Status::Paused => unreachable!(),
             }
+            self.write_save(&save)?;
         }
     }
 }
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), Box<dyn Error>> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
     let opt = Opt::from_args();
     let mut sss = opt.sss()?;
-    sss.search(term_width, &opt.dir, opt.view_freq)
+    create_dir_all(&opt.dir)?;
+    let save_dir = opt.save_dir.as_ref().unwrap_or(&opt.dir);
+    create_dir_all(&save_dir)?;
+    let save = save_dir.join(&"save.json");
+    sss.search(term_width, &opt.dir, &save, opt.view_freq, opt.save_freq)
 }

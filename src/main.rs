@@ -114,9 +114,8 @@ impl SSS {
     fn from_save<P: AsRef<Path>>(save: P) -> Result<Self, Box<dyn Error>> {
         let mut buffer = String::new();
         File::open(&save)?.read_to_string(&mut buffer)?;
-        let saved: (usize, WorldSer) = from_str(&buffer)?;
-        let cell_count = saved.0;
-        let world = saved.1.world()?;
+        let world = from_str::<WorldSer>(&buffer)?.world()?;
+        let cell_count = world.config().max_cell_count.map(|i| i + 1).unwrap_or(0);
         let gen = 0;
         let stopwatch = Stopwatch::start_new();
         Ok(SSS {
@@ -227,7 +226,7 @@ impl SSS {
 
     fn write_save<P: AsRef<Path>>(&self, save: P) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(save)?;
-        let json = to_vec(&(self.cell_count, self.world.ser()))?;
+        let json = to_vec(&self.world.ser())?;
         file.write(&json)?;
         Ok(())
     }

@@ -168,52 +168,32 @@ impl SSS {
             height,
             self.world.config().rule_string
         )?;
-        let (mut char, mut n) = (None, 0);
         let mut line = String::new();
-        for c in lines.join("\n").trim_end().chars() {
-            if char == Some(c) {
-                n += 1;
-            } else if n > 0 && char.is_some() {
-                let mut tally = if n > 1 {
-                    format!("{}", n)
+        let lines = lines.join("\n");
+        let mut chars = lines.trim_end().chars().peekable();
+        let mut count = 0;
+        while let Some(c) = chars.next() {
+            count += 1;
+            if Some(&c) != chars.peek() {
+                let mut run = if count > 1 {
+                    count.to_string()
                 } else {
                     String::new()
                 };
-                match char {
-                    Some('.') => tally.push('b'),
-                    Some('O') => tally.push('o'),
-                    Some('\n') => tally.push('$'),
+                match c {
+                    '.' => run.push('b'),
+                    'O' => run.push('o'),
+                    '\n' => run.push('$'),
                     _ => unreachable!(),
                 }
-                if line.len() + tally.len() <= 70 {
-                    line += &tally;
+                if line.len() + run.len() <= 70 {
+                    line += &run;
                 } else {
                     writeln!(file, "{}", line)?;
-                    line = tally;
+                    line = run;
                 }
-                char = Some(c);
-                n = 1;
-            } else {
-                char = Some(c);
-                n = 1;
+                count = 0;
             }
-        }
-        let mut tally = if n > 1 {
-            format!("{}", n)
-        } else {
-            String::new()
-        };
-        match char {
-            Some('.') => tally.push('b'),
-            Some('O') => tally.push('o'),
-            Some('\n') => tally.push('$'),
-            _ => unreachable!(),
-        }
-        if line.len() + tally.len() <= 70 {
-            line += &tally;
-        } else {
-            writeln!(file, "{}", line)?;
-            line = tally;
         }
         if line.len() < 70 {
             write!(file, "{}", line)?;

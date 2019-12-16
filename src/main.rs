@@ -227,7 +227,7 @@ impl SSS {
     fn write_save<P: AsRef<Path>>(&self, save: P) -> Result<(), Box<dyn Error>> {
         let mut file = File::create(save)?;
         let json = to_vec(&self.world.ser())?;
-        file.write(&json)?;
+        file.write_all(&json)?;
         Ok(())
     }
 

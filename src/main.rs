@@ -139,11 +139,12 @@ impl SSS {
             term_width - 1
         );
         println!("{}", Color::Yellow.paint(info));
+        let width = (self.world.config().width as usize).min(term_width - 1);
         let display = self
             .world
             .display_gen(self.gen)
             .lines()
-            .map(|l| &l[0..term_width - 1])
+            .map(|l| &l[0..width])
             .join("\n");
         println!("{}", style.paint(display));
     }

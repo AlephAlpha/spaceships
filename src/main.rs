@@ -1,6 +1,5 @@
 use ansi_term::{Color, Style};
-use itertools::Itertools;
-use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry, WorldSer};
+use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry, WorldSer, ALIVE, DEAD};
 use serde_json::{from_str, to_vec};
 use std::{
     error::Error,
@@ -82,7 +81,7 @@ impl Opt {
             .set_translate(self.dx, self.dy)
             .set_symmetry(self.symmetry)
             .set_rule_string(self.rule.clone())
-            .set_new_state(NewState::Choose(State::Dead))
+            .set_new_state(NewState::ChooseDead)
             .set_non_empty_front(true)
             .set_max_cell_count(if cell_count > 0 {
                 Some(cell_count - 1)
@@ -139,14 +138,27 @@ impl SSS {
             term_width - 1
         );
         println!("{}", Color::Yellow.paint(info));
-        let width = (self.world.config().width as usize).min(term_width - 1);
-        let display = self
-            .world
-            .display_gen(self.gen)
-            .lines()
-            .map(|l| &l[0..width])
-            .join("\n");
-        println!("{}", style.paint(display));
+        let width = (self.world.config().width).min(term_width as isize - 1);
+        let mut display = String::new();
+        for y in 0..self.world.config().height {
+            for x in 0..width {
+                let state = self.world.get_cell_state((x, y, self.gen)).unwrap();
+                match state {
+                    Some(DEAD) => display.push('.'),
+                    Some(ALIVE) => {
+                        if self.world.is_gen_rule() {
+                            display.push('A')
+                        } else {
+                            display.push('o')
+                        }
+                    }
+                    Some(State(i)) => display.push((b'A' + i as u8 - 1) as char),
+                    None => display.push('?'),
+                };
+            }
+            display.push('\n');
+        }
+        print!("{}", style.paint(display));
     }
 
     fn write_pat<P: AsRef<Path>>(&self, dir: P) -> Result<(), Box<dyn Error>> {
@@ -158,10 +170,39 @@ impl SSS {
             self.world.config().dy
         ));
         let mut file = File::create(filename)?;
-        let pat = self.world.display_gen(self.gen);
-        let mut lines = pat.lines().map(|l| l.trim_end_matches('.'));
-        let width = lines.clone().map(|l| l.len()).max().unwrap_or(0);
-        let height = lines.clone().count();
+        let mut unrle = String::new();
+        let height = self.world.config().height;
+        let mut width = 0;
+        for y in 0..height {
+            let mut line = String::new();
+            for x in 0..self.world.config().width {
+                let state = self.world.get_cell_state((x, y, self.gen)).unwrap();
+                match state {
+                    Some(DEAD) => {
+                        if self.world.is_gen_rule() {
+                            line.push('.')
+                        } else {
+                            line.push('b')
+                        }
+                    }
+                    Some(ALIVE) => {
+                        if self.world.is_gen_rule() {
+                            line.push('A')
+                        } else {
+                            line.push('o')
+                        }
+                    }
+                    Some(State(i)) => line.push((b'A' + i as u8 - 1) as char),
+                    None => line.push('?'),
+                };
+            }
+            line = line.trim_end_matches(|c| ".b?".contains(c)).to_owned();
+            width = width.max(line.len() as isize);
+            line.push('$');
+            unrle.push_str(&line);
+        }
+        unrle = unrle.trim_end_matches('$').to_owned();
+        unrle.push('!');
         writeln!(
             file,
             "x = {}, y = {}, rule = {}",
@@ -170,8 +211,7 @@ impl SSS {
             self.world.config().rule_string
         )?;
         let mut line = String::new();
-        let lines = lines.join("\n");
-        let mut chars = lines.trim_end().chars().peekable();
+        let mut chars = unrle.chars().peekable();
         let mut count = 0;
         while let Some(c) = chars.next() {
             count += 1;
@@ -181,12 +221,7 @@ impl SSS {
                 } else {
                     String::new()
                 };
-                match c {
-                    '.' => run.push('b'),
-                    'O' => run.push('o'),
-                    '\n' => run.push('$'),
-                    _ => unreachable!(),
-                }
+                run.push(c);
                 if line.len() + run.len() <= 70 {
                     line += &run;
                 } else {
@@ -201,7 +236,6 @@ impl SSS {
         } else {
             writeln!(file, "{}", line)?;
         }
-        writeln!(file, "!")?;
         Ok(())
     }
 
@@ -232,8 +266,8 @@ impl SSS {
                         self.gen = min_gen;
                         self.cell_count = min_cell_count;
                         self.display(term_width, Style::default());
-                        self.write_pat(&dir).map_err(|e| e.to_string())?;
-                        self.world.config().max_cell_count = Some(self.cell_count - 1);
+                        self.write_pat(&dir)?;
+                        self.world.set_max_cell_count(Some(self.cell_count - 1));
                         self.gen = 0;
                     }
                     Status::None => {

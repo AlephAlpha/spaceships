@@ -4,8 +4,7 @@ Search for spaceships in Conway's Game of Life using the [rlifesrc](https://gith
 
 It starts from a given minimum height, and an optional upper bound of the cell count.
 
-When a new result is found, it will reduce the upper bound to the cell count of this result minus 1 (even if there is no
-initial upper bound).
+When a new result is found, it will reduce the upper bound to the cell count of this result minus 1 (even if there is no initial upper bound).
 
 When no more result can be found, it will increase the height by 1 and continue the search.
 
@@ -13,7 +12,11 @@ Spaceships with period `p`, speed `(x,y)c/p`, and `n` cells are saved in the fil
 
 Press `Ctrl-C` to abort.
 
-See the `b3s23` directory for the search results for Conway's Game of Life. 
+The search status is automatically saved in a file named `save.json` in the same folder as the search results.
+
+When starting a search, the program will first try to load the save file; if such a file is corrupted or does not exist, it will start a new search with the given parameters.
+
+See the `b3s23` directory for the search results for Conway's Game of Life.
 
 ## Usage
 
@@ -31,36 +34,40 @@ FLAGS:
 
 OPTIONS:
     -d, --dir <dir>
-            Search results are saved here.
+            Search results are saved here
 
     -x, --dx <dx>
-            Horizontal translation.
+            Horizontal translation
 
     -y, --dy <dy>
-            Vertical translation.
+            Vertical translation
 
     -c, --init-cell-count <init-cell-count>
             Initial upper bound of the cell count.
 
             It will automatically decrease when a new result is found. [default: 0]
-
     -h, --init-height <init-height>
             Initial height.
 
             It will automatically increase when no more result can be found. [default: 1]
-
     -w, --max-width <max-width>
-            Maximum width. [default: 1024]
+            Maximum width [default: 1024]
 
     -p, --period <period>
-            Period.
+            Period
 
     -r, --rule <rule>
-            Rule string. [default: B3/S23]
+            Rule string [default: B3/S23]
+
+        --save-dir <save-dir>
+            Temporary search status are saved here
+
+        --save-freq <save-freq>
+            Save the temporary search status every this number of views [default: 100]
 
     -s, --symmetry <symmetry>
-            Symmetry. [default: C1]
+            Symmetry [default: C1]
 
     -f, --view-freq <view-freq>
-            Print the world every this number of steps. [default: 5000000]
+            Print the world every this number of steps [default: 5000000]
 ```

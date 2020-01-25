@@ -20,7 +20,7 @@ See the `b3s23` directory for the search results for Conway's Game of Life.
 
 ## Usage
 
-```
+```plaintext
 USAGE:
     spaceships [OPTIONS] --dir <dir> --dx <dx> --dy <dy> --period <period>
 

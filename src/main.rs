@@ -276,7 +276,7 @@ impl SSS {
                         self.world = config.world()?;
                         self.gen = 0;
                     }
-                    Status::Searching => {
+                    Status::Initial | Status::Searching => {
                         self.display(term_width, Color::Green.normal());
                         self.gen = (self.gen + 1) % self.world.config().period;
                     }

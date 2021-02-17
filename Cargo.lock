@@ -347,9 +347,9 @@ dependencies = [
 
 [[package]]
 name = "rlifesrc-lib"
-version = "0.3.5"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9524ffc6033093020b212517eea5659ac1384548cdfb621ca227cc1fe9e9faaf"
+checksum = "1c0f4abb82b4149bfc1ad23c3f33fad73d84af629c9b412f0407b027efe23b46"
 dependencies = [
  "bitflags",
  "ca-rules",

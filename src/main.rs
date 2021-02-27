@@ -1,5 +1,7 @@
 use ansi_term::{Color, Style};
-use rlifesrc_lib::{Config, NewState, Search, State, Status, Symmetry, WorldSer, ALIVE, DEAD};
+use rlifesrc_lib::{
+    save::WorldSer, Config, NewState, Search, State, Status, Symmetry, ALIVE, DEAD,
+};
 use serde_json::{from_str, to_vec};
 use std::{
     error::Error,
@@ -37,13 +39,13 @@ struct Opt {
     dir: PathBuf,
     /// Period.
     #[structopt(short, long)]
-    period: isize,
+    period: i32,
     /// Horizontal translation.
     #[structopt(short = "x", long)]
-    dx: isize,
+    dx: i32,
     /// Vertical translation.
     #[structopt(short = "y", long)]
-    dy: isize,
+    dy: i32,
     /// Symmetry.
     #[structopt(short, long, default_value = "C1")]
     symmetry: Symmetry,
@@ -52,17 +54,17 @@ struct Opt {
     rule: String,
     /// Maximum width.
     #[structopt(short = "w", long, default_value = "1024")]
-    max_width: isize,
+    max_width: i32,
     /// Initial upper bound of the cell count.
     ///
     /// It will automatically decrease when a new result is found.
     #[structopt(short = "c", long, default_value = "0")]
-    init_cell_count: usize,
+    init_cell_count: u32,
     /// Initial height.
     ///
     /// It will automatically increase when no more result can be found.
     #[structopt(short = "h", long, default_value = "1")]
-    init_height: isize,
+    init_height: i32,
     /// Print the world every this number of steps.
     #[structopt(short = "f", long, default_value = "5000000")]
     view_freq: u64,
@@ -82,7 +84,6 @@ impl Opt {
             .set_symmetry(self.symmetry)
             .set_rule_string(self.rule.clone())
             .set_new_state(NewState::ChooseDead)
-            .set_non_empty_front(true)
             .set_max_cell_count(if cell_count > 0 {
                 Some(cell_count - 1)
             } else {
@@ -103,8 +104,8 @@ impl Opt {
 
 /// Spaceship Search
 struct SSS {
-    cell_count: usize,
-    gen: isize,
+    cell_count: u32,
+    gen: i32,
     world: Box<dyn Search>,
     stopwatch: Stopwatch,
 }
@@ -138,11 +139,11 @@ impl SSS {
             term_width - 1
         );
         println!("{}", Color::Yellow.paint(info));
-        let width = (self.world.config().width).min(term_width as isize - 1);
+        let width = (self.world.config().width).min(term_width as i32 - 1);
         let mut display = String::new();
         for y in 0..self.world.config().height {
             for x in 0..width {
-                let state = self.world.get_cell_state((x, y, self.gen)).unwrap();
+                let state = self.world.get_cell_state((x, y, self.gen));
                 match state {
                     Some(DEAD) => display.push('.'),
                     Some(ALIVE) => {
@@ -176,7 +177,7 @@ impl SSS {
         for y in 0..height {
             let mut line = String::new();
             for x in 0..self.world.config().width {
-                let state = self.world.get_cell_state((x, y, self.gen)).unwrap();
+                let state = self.world.get_cell_state((x, y, self.gen));
                 match state {
                     Some(DEAD) => {
                         if self.world.is_gen_rule() {

@@ -77,7 +77,7 @@ struct Opt {
 }
 
 impl Opt {
-    fn sss(&self) -> Result<SSS, Box<dyn Error>> {
+    fn sss(&self) -> Result<Sss, Box<dyn Error>> {
         let cell_count = self.init_cell_count;
         let config = Config::new(self.max_width, self.init_height, self.period)
             .set_translate(self.dx, self.dy)
@@ -93,7 +93,7 @@ impl Opt {
         let gen = 0;
         let world = config.world()?;
         let stopwatch = Stopwatch::start_new();
-        Ok(SSS {
+        Ok(Sss {
             cell_count,
             gen,
             world,
@@ -103,14 +103,14 @@ impl Opt {
 }
 
 /// Spaceship Search
-struct SSS {
+struct Sss {
     cell_count: u32,
     gen: i32,
     world: Box<dyn Search>,
     stopwatch: Stopwatch,
 }
 
-impl SSS {
+impl Sss {
     fn from_save<P: AsRef<Path>>(save: P) -> Result<Self, Box<dyn Error>> {
         let mut buffer = String::new();
         File::open(&save)?.read_to_string(&mut buffer)?;
@@ -118,7 +118,7 @@ impl SSS {
         let cell_count = world.config().max_cell_count.map(|i| i + 1).unwrap_or(0);
         let gen = 0;
         let stopwatch = Stopwatch::start_new();
-        Ok(SSS {
+        Ok(Sss {
             cell_count,
             gen,
             world,
@@ -296,6 +296,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let save_dir = opt.save_dir.as_ref().unwrap_or(&opt.dir);
     create_dir_all(&save_dir)?;
     let save = save_dir.join(&"save.json");
-    let mut sss = SSS::from_save(&save).or_else(|_| opt.sss())?;
+    let mut sss = Sss::from_save(&save).or_else(|_| opt.sss())?;
     sss.search(term_width, &opt.dir, &save, opt.view_freq, opt.save_freq)
 }

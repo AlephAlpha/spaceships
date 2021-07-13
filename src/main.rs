@@ -1,10 +1,10 @@
 use ansi_term::{Color, Style};
+use anyhow::Result;
 use rlifesrc_lib::{
-    save::WorldSer, Config, NewState, Search, State, Status, Symmetry, ALIVE, DEAD,
+    save::WorldSer, Config, NewState, PolyWorld, State, Status, Symmetry, ALIVE, DEAD,
 };
 use serde_json::{from_str, to_vec};
 use std::{
-    error::Error,
     fs::{create_dir_all, File},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -77,7 +77,7 @@ struct Opt {
 }
 
 impl Opt {
-    fn sss(&self) -> Result<Sss, Box<dyn Error>> {
+    fn sss(&self) -> Result<Sss> {
         let cell_count = self.init_cell_count;
         let config = Config::new(self.max_width, self.init_height, self.period)
             .set_translate(self.dx, self.dy)
@@ -106,12 +106,12 @@ impl Opt {
 struct Sss {
     cell_count: u32,
     gen: i32,
-    world: Box<dyn Search>,
+    world: PolyWorld,
     stopwatch: Stopwatch,
 }
 
 impl Sss {
-    fn from_save<P: AsRef<Path>>(save: P) -> Result<Self, Box<dyn Error>> {
+    fn from_save<P: AsRef<Path>>(save: P) -> Result<Self> {
         let mut buffer = String::new();
         File::open(&save)?.read_to_string(&mut buffer)?;
         let world = from_str::<WorldSer>(&buffer)?.world()?;
@@ -162,7 +162,7 @@ impl Sss {
         print!("{}", style.paint(display));
     }
 
-    fn write_pat<P: AsRef<Path>>(&self, dir: P) -> Result<(), Box<dyn Error>> {
+    fn write_pat<P: AsRef<Path>>(&self, dir: P) -> Result<()> {
         let filename = dir.as_ref().join(&format!(
             "{}P{}H{}V{}.rle",
             self.cell_count,
@@ -240,7 +240,7 @@ impl Sss {
         Ok(())
     }
 
-    fn write_save<P: AsRef<Path>>(&self, save: P) -> Result<(), Box<dyn Error>> {
+    fn write_save<P: AsRef<Path>>(&self, save: P) -> Result<()> {
         let mut file = File::create(save)?;
         let json = to_vec(&self.world.ser())?;
         file.write_all(&json)?;
@@ -254,7 +254,7 @@ impl Sss {
         save: Q,
         view_freq: u64,
         save_freq: u64,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         loop {
             for _ in 0..save_freq {
                 let status = self.world.search(Some(view_freq));
@@ -281,7 +281,6 @@ impl Sss {
                         self.display(term_width, Color::Green.normal());
                         self.gen = (self.gen + 1) % self.world.config().period;
                     }
-                    Status::Paused => unreachable!(),
                 }
             }
             self.write_save(&save)?;
@@ -289,7 +288,7 @@ impl Sss {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let term_width = dimensions().unwrap_or((80, 24)).0;
     let opt = Opt::from_args();
     create_dir_all(&opt.dir)?;

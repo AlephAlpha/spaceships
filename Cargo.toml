@@ -10,7 +10,7 @@ edition = "2018"
 ansi_term = "0.12.1"
 anyhow = "1.0.44"
 rlifesrc-lib = { version = "0.5.1", features = ["serde"] }
-serde_json = "1.0.67"
+serde_json = "1.0.68"
 stopwatch = "0.0.7"
 structopt = "0.3.23"
 term_size = "0.3.2"

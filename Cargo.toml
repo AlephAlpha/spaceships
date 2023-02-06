@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 ansi_term = "0.12.1"
-anyhow = "1.0.66"
+anyhow = "1.0.69"
 rlifesrc-lib = { version = "0.6.0", features = ["serde"] }
 serde_json = "1.0.89"
 stopwatch = "0.0.7"
